@@ -51,6 +51,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private CaptureRequest.Builder mCaptureRequestBuilder;
     private CameraDevice cameraDevice;
     private ImageReader mImageReader;
+    private static final String TAG = MainActivity.class.getSimpleName();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,6 +91,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         } catch (CameraAccessException e) {
             e.printStackTrace();
+            Log.e(TAG, "error message" + e.getReason());
         }
 
     }
@@ -114,6 +116,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         } catch (CameraAccessException e) {
             e.printStackTrace();
+            Log.e(TAG, "error message" + e.getReason());
         }
     }
 
@@ -132,6 +135,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         startPreview();
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
+                        Log.e(TAG, "error message" + e.getReason());
                     }
                 }
 
@@ -142,6 +146,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
+            Log.e(TAG, "error message" + e.getReason());
         }
     }
 
@@ -208,20 +213,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
-            Log.e("haochen", "open");
+            Log.e(TAG, "open");
             cameraDevice = camera;
             startPreview();
         }
 
         @Override
         public void onDisconnected(@NonNull CameraDevice camera) {
-            Log.i("haochen", "disconnected");
+            Log.i(TAG, "disconnected");
             camera.close();
         }
 
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
-            Log.i("haochen", "error");
+            Log.i(TAG, "error");
         }
     };
 
@@ -244,6 +249,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         mCameraCaptureSession.setRepeatingRequest(mCaptureRequest, mCaptureCallback, null);
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
+                        Log.e(TAG, "error message" + e.getReason());
                     }
                 }
 
@@ -254,6 +260,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
+            Log.e(TAG, "error message" + e.getReason());
             cameraDevice.close();
         }
     }
@@ -295,6 +302,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     mImageFile.createNewFile();
                 } catch (IOException e) {
                     e.printStackTrace();
+                    Log.e(TAG, "error message" + e.getCause());
                 }
             }
             FileOutputStream fos = null;
