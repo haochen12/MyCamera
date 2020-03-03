@@ -4,7 +4,6 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
-import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -18,7 +17,6 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.SystemClock;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -34,7 +32,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.sql.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,23 +41,30 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private TextureView mTextureView;
     private CameraManager mCameraManager;
-    private String mCameraId;
     private Size mPreviewSize;
     private CaptureRequest mCaptureRequest;
     private CameraCaptureSession mCameraCaptureSession;
     private CaptureRequest.Builder mCaptureRequestBuilder;
-    private CameraDevice cameraDevice;
+    private CameraDevice mCameraDevice;
     private ImageReader mImageReader;
     private static final String TAG = MainActivity.class.getSimpleName();
+    private String mCameraId;
+    boolean bCameraFace = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mTextureView = findViewById(R.id.texture_view);
+        initListener();
+        mCameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+    }
+
+    private void initListener() {
         Button takePic = findViewById(R.id.take_photo);
         takePic.setOnClickListener(this);
-        mCameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        Button btnChange = findViewById(R.id.btn_change_camera_facing);
+        btnChange.setOnClickListener(this);
     }
 
     @Override
@@ -69,7 +73,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             case R.id.take_photo:
                 takePic();
                 break;
-            case R.id.take_record:
+            case R.id.btn_change_camera_facing:
+                closeCamera();
+                if (bCameraFace) {
+                    bCameraFace = false;
+                } else {
+                    bCameraFace = true;
+                }
+                setCameraSetting(mWidth, mHeight);
+                openCamera();
                 break;
         }
     }
@@ -87,10 +99,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 0);
                 return;
             }
-            mCameraManager.openCamera(mCameraId, mStateCallback, null);
+            mCameraManager.openCamera(mCameraId, mCameraStateCallback, null);
 
         } catch (CameraAccessException e) {
-            e.printStackTrace();
             Log.e(TAG, "error message" + e.getReason());
         }
 
@@ -103,31 +114,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             //遍历所有摄像头
             for (String cameraId : mCameraManager.getCameraIdList()) {
                 CameraCharacteristics characteristics = mCameraManager.getCameraCharacteristics(cameraId);
-                //默认打开后置摄像头
-                if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT)
-                    continue;
+                if (characteristics.get(CameraCharacteristics.LENS_FACING).equals(CameraCharacteristics.LENS_FACING_BACK) && !bCameraFace) {
+                    mCameraId = cameraId;
+                } else if (characteristics.get(CameraCharacteristics.LENS_FACING).equals(CameraCharacteristics.LENS_FACING_FRONT) && bCameraFace) {
+                    mCameraId = cameraId;
+                }
+
+                Log.i(TAG, "cameraId" + cameraId);
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 //根据TextureView的尺寸设置预览尺寸
                 mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
-                mCameraId = cameraId;
-                break;
             }
 
         } catch (CameraAccessException e) {
-            e.printStackTrace();
             Log.e(TAG, "error message" + e.getReason());
         }
     }
 
     private void takePic() {
         try {
-            final CaptureRequest.Builder mBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            final CaptureRequest.Builder mBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             mBuilder.addTarget(mImageReader.getSurface());
             mBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
             mBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED);
             mBuilder.set(CaptureRequest.JPEG_ORIENTATION, getRequestedOrientation());
-            cameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
+            mCameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     try {
@@ -145,7 +157,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             }, null);
         } catch (CameraAccessException e) {
-            e.printStackTrace();
             Log.e(TAG, "error message" + e.getReason());
         }
     }
@@ -185,9 +196,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return sizeMap[0];
     }
 
+    private int mWidth;
+    private int mHeight;
+
     private TextureView.SurfaceTextureListener mSurfaceTextureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+            mWidth = width;
+            mHeight = height;
             setCameraSetting(width, height);
             openCamera();
         }
@@ -199,7 +215,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-            mCameraCaptureSession.close();
+            closeCamera();
 
             return false;
         }
@@ -210,11 +226,31 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     };
 
-    private CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+    private CameraDevice.StateCallback mCameraStateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            Log.i(TAG, "open");
+            mCameraDevice = camera;
+            startPreview();
+        }
+
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            Log.i(TAG, "disconnected");
+            mCameraDevice.close();
+        }
+
+        @Override
+        public void onError(@NonNull CameraDevice camera, int error) {
+            Log.e(TAG, "error");
+        }
+    };
+
+    private CameraDevice.StateCallback mFrontCameraStateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
             Log.e(TAG, "open");
-            cameraDevice = camera;
+            mCameraDevice = camera;
             startPreview();
         }
 
@@ -230,20 +266,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     };
 
-
     private void startPreview() {
         SurfaceTexture mSurfaceTexture = mTextureView.getSurfaceTexture();
         mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         Surface mSurface = new Surface(mSurfaceTexture);
         try {
-            mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            mCaptureRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             mCaptureRequestBuilder.addTarget(mSurface);
 
-            cameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
+            mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     mCameraCaptureSession = session;
-//                    mCaptureRequestBuilder.set(CaptureRequest.FLASH_MODE,CaptureRequest.FLASH_MODE_TORCH);
                     mCaptureRequest = mCaptureRequestBuilder.build();
                     try {
                         mCameraCaptureSession.setRepeatingRequest(mCaptureRequest, mCaptureCallback, null);
@@ -255,13 +289,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                    cameraDevice.close();
+                    mCameraDevice.close();
                 }
             }, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
             Log.e(TAG, "error message" + e.getReason());
-            cameraDevice.close();
+            mCameraDevice.close();
+        }
+    }
+
+    private void closeCamera() {
+        if (null != mCameraCaptureSession) {
+            mCameraCaptureSession.close();
+            mCameraCaptureSession = null;
+        }
+
+        if (null != mCameraDevice) {
+            mCameraDevice.close();
+            mCameraDevice = null;
+        }
+
+        if (null != mImageReader) {
+            mImageReader.close();
+            mImageReader = null;
         }
     }
 
