@@ -1,4 +1,4 @@
-package com.haochen.cameratest;
+package com.haochen.mycamera;
 
 import android.content.Context;
 

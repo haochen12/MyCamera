@@ -1,4 +1,4 @@
-package com.haochen.cameratest;
+package com.haochen.mycamera.activity;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -23,15 +23,18 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.Button;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
+import com.haochen.mycamera.R;
+import com.haochen.mycamera.utile.ImageUtil;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -216,7 +219,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
             closeCamera();
-
             return false;
         }
 
@@ -246,32 +248,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     };
 
-    private CameraDevice.StateCallback mFrontCameraStateCallback = new CameraDevice.StateCallback() {
-        @Override
-        public void onOpened(@NonNull CameraDevice camera) {
-            Log.e(TAG, "open");
-            mCameraDevice = camera;
-            startPreview();
-        }
-
-        @Override
-        public void onDisconnected(@NonNull CameraDevice camera) {
-            Log.i(TAG, "disconnected");
-            camera.close();
-        }
-
-        @Override
-        public void onError(@NonNull CameraDevice camera, int error) {
-            Log.i(TAG, "error");
-        }
-    };
-
     private void startPreview() {
         SurfaceTexture mSurfaceTexture = mTextureView.getSurfaceTexture();
         mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         Surface mSurface = new Surface(mSurfaceTexture);
         try {
             mCaptureRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            mCaptureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, getRequestedOrientation());
             mCaptureRequestBuilder.addTarget(mSurface);
 
             mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
@@ -282,20 +265,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     try {
                         mCameraCaptureSession.setRepeatingRequest(mCaptureRequest, mCaptureCallback, null);
                     } catch (CameraAccessException e) {
-                        e.printStackTrace();
                         Log.e(TAG, "error message" + e.getReason());
                     }
                 }
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    Toast.makeText(getApplicationContext(), "开启摄像头失败", Toast.LENGTH_SHORT).show();
+                    session.close();
                     mCameraDevice.close();
+                    Log.e(TAG, "开启摄像头失败");
                 }
             }, null);
         } catch (CameraAccessException e) {
-            e.printStackTrace();
-            Log.e(TAG, "error message" + e.getReason());
             mCameraDevice.close();
+            Log.e(TAG, "error message" + e.getReason());
         }
     }
 
@@ -343,16 +327,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         @Override
         public void run() {
-
-            ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
-            byte[] data = new byte[buffer.remaining()];
-            buffer.get(data);
+            byte[] data = ImageUtil.getByte(mImage);
             File mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/" + System.currentTimeMillis() + ".jpg");
             if (!mImageFile.exists()) {
                 try {
                     mImageFile.createNewFile();
                 } catch (IOException e) {
-                    e.printStackTrace();
                     Log.e(TAG, "error message" + e.getCause());
                 }
             }
@@ -375,6 +355,5 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
         }
     }
-
 }
 
