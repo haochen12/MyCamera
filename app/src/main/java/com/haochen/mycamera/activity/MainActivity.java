@@ -16,7 +16,6 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Bundle;
-import android.os.Environment;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -30,11 +29,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import com.haochen.mycamera.R;
-import com.haochen.mycamera.utile.ImageUtil;
+import com.haochen.mycamera.utile.CameraUtil;
+import com.haochen.mycamera.utile.ImageReaderUtil;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -53,6 +50,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private static final String TAG = MainActivity.class.getSimpleName();
     private String mCameraId;
     boolean bCameraFace = false;
+    private int mWidth;
+    private int mHeight;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,14 +148,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         session.capture(mBuilder.build(), null, null);
                         startPreview();
                     } catch (CameraAccessException e) {
-                        e.printStackTrace();
                         Log.e(TAG, "error message" + e.getReason());
                     }
                 }
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-
+                    session.close();
+                    mCameraDevice.close();
+                    Log.e(TAG, "fail to create session");
                 }
             }, null);
         } catch (CameraAccessException e) {
@@ -168,9 +168,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public void onImageAvailable(ImageReader reader) {
             Image mImage = reader.acquireNextImage();
-            ImageSaver mImageSaver = new ImageSaver(mImage);
-            mImageSaver.run();
-            mImage.close();
+            ImageReaderUtil.savePicByCustomPath(mImage, "");
         }
     };
 
@@ -198,9 +196,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
         return sizeMap[0];
     }
-
-    private int mWidth;
-    private int mHeight;
 
     private TextureView.SurfaceTextureListener mSurfaceTextureListener = new TextureView.SurfaceTextureListener() {
         @Override
@@ -272,32 +267,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
                     Toast.makeText(getApplicationContext(), "开启摄像头失败", Toast.LENGTH_SHORT).show();
-                    session.close();
-                    mCameraDevice.close();
+                    closeCamera();
                     Log.e(TAG, "开启摄像头失败");
                 }
             }, null);
         } catch (CameraAccessException e) {
-            mCameraDevice.close();
+            CameraUtil.closeCameraDevice(mCameraDevice);
             Log.e(TAG, "error message" + e.getReason());
         }
     }
 
     private void closeCamera() {
-        if (null != mCameraCaptureSession) {
-            mCameraCaptureSession.close();
-            mCameraCaptureSession = null;
-        }
-
-        if (null != mCameraDevice) {
-            mCameraDevice.close();
-            mCameraDevice = null;
-        }
-
-        if (null != mImageReader) {
-            mImageReader.close();
-            mImageReader = null;
-        }
+        CameraUtil.closeCameraCaptureSession(mCameraCaptureSession);
+        CameraUtil.closeCameraDevice(mCameraDevice);
+        ImageReaderUtil.closeImageReader(mImageReader);
     }
 
 
@@ -317,43 +300,5 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             super.onCaptureCompleted(session, request, result);
         }
     };
-
-    public static class ImageSaver implements Runnable {
-        private Image mImage;
-
-        public ImageSaver(Image image) {
-            mImage = image;
-        }
-
-        @Override
-        public void run() {
-            byte[] data = ImageUtil.getByte(mImage);
-            File mImageFile = new File(Environment.getExternalStorageDirectory() + "/DCIM/" + System.currentTimeMillis() + ".jpg");
-            if (!mImageFile.exists()) {
-                try {
-                    mImageFile.createNewFile();
-                } catch (IOException e) {
-                    Log.e(TAG, "error message" + e.getCause());
-                }
-            }
-            FileOutputStream fos = null;
-            try {
-                fos = new FileOutputStream(mImageFile);
-                fos.write(data, 0, data.length);
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                mImageFile = null;
-                if (fos != null) {
-                    try {
-                        fos.close();
-                        fos = null;
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-    }
 }
 
