@@ -5,10 +5,11 @@
     android:layout_height="match_parent"
     tools:context=".activity.MainActivity">
 
-    <TextureView
+    <com.haochen.mycamera.activity.AutoFitTextureView
         android:id="@+id/texture_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true" />
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -27,6 +28,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="拍照" />
+
+        <Button
+            android:id="@+id/take_record"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="录制" />
 
         <Button
             android:id="@+id/btn_change_camera_facing"

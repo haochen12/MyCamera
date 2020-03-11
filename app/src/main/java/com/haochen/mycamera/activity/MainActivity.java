@@ -39,7 +39,7 @@ import java.util.Comparator;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
-    private TextureView mTextureView;
+    private AutoFitTextureView mTextureView;
     private CameraManager mCameraManager;
     private Size mPreviewSize;
     private CaptureRequest mCaptureRequest;
@@ -67,6 +67,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         takePic.setOnClickListener(this);
         Button btnChange = findViewById(R.id.btn_change_camera_facing);
         btnChange.setOnClickListener(this);
+        Button takeRecord = findViewById(R.id.take_record);
+        takeRecord.setOnClickListener(this);
     }
 
     @Override
@@ -84,6 +86,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
                 setCameraSetting(mWidth, mHeight);
                 openCamera();
+                break;
+
+            case R.id.take_record:
+
                 break;
         }
     }
@@ -118,15 +124,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 CameraCharacteristics characteristics = mCameraManager.getCameraCharacteristics(cameraId);
                 if (characteristics.get(CameraCharacteristics.LENS_FACING).equals(CameraCharacteristics.LENS_FACING_BACK) && !bCameraFace) {
                     mCameraId = cameraId;
+                    StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    //根据TextureView的尺寸设置预览尺寸
+                    mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
+
                 } else if (characteristics.get(CameraCharacteristics.LENS_FACING).equals(CameraCharacteristics.LENS_FACING_FRONT) && bCameraFace) {
                     mCameraId = cameraId;
+                    StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    //根据TextureView的尺寸设置预览尺寸
+                    mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
                 }
 
+                mTextureView.setAspectRatio(mPreviewSize.getHeight(), mPreviewSize.getWidth());
                 Log.i(TAG, "cameraId" + cameraId);
                 //获取StreamConfigurationMap，它是管理摄像头支持的所有输出格式和尺寸
-                StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                //根据TextureView的尺寸设置预览尺寸
-                mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
             }
 
         } catch (CameraAccessException e) {
@@ -145,6 +156,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     try {
+                        session.stopRepeating();
+                        session.abortCaptures();
                         session.capture(mBuilder.build(), null, null);
                         startPreview();
                     } catch (CameraAccessException e) {
