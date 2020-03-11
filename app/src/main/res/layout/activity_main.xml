@@ -33,7 +33,13 @@
             android:id="@+id/take_record"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="录制" />
+            android:text="录像" />
+
+        <Button
+            android:id="@+id/take_record_screen"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="录屏" />
 
         <Button
             android:id="@+id/btn_change_camera_facing"

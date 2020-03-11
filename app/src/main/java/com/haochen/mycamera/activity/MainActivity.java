@@ -15,7 +15,9 @@ import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.MediaRecorder;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -32,6 +34,7 @@ import com.haochen.mycamera.R;
 import com.haochen.mycamera.utile.CameraUtil;
 import com.haochen.mycamera.utile.ImageReaderUtil;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -53,6 +56,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private int mWidth;
     private int mHeight;
 
+    Button takeRecord;
+
+    private MediaRecorder mMediaRecorder;
+
+    private boolean isRecord = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -60,6 +69,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mTextureView = findViewById(R.id.texture_view);
         initListener();
         mCameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        mMediaRecorder = new MediaRecorder();
     }
 
     private void initListener() {
@@ -67,9 +77,40 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         takePic.setOnClickListener(this);
         Button btnChange = findViewById(R.id.btn_change_camera_facing);
         btnChange.setOnClickListener(this);
-        Button takeRecord = findViewById(R.id.take_record);
+        takeRecord = findViewById(R.id.take_record);
         takeRecord.setOnClickListener(this);
+        Button takeRecordScreen = findViewById(R.id.take_record_screen);
+        takeRecordScreen.setOnClickListener(this);
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mTextureView.setSurfaceTextureListener(mSurfaceTextureListener);
+    }
+
+    void setupMediaRecorder() {
+        mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+        mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT);
+
+        mMediaRecorder.setOutputFile(Environment.getExternalStorageDirectory() + "/DCIM/" + System.currentTimeMillis() + ".mp4");
+
+        mMediaRecorder.setVideoFrameRate(30);
+        mMediaRecorder.setAudioEncodingBitRate(10000000);
+
+        mMediaRecorder.setVideoSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+        mMediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+        mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+
+        try {
+            mMediaRecorder.prepare();
+        } catch (IOException e) {
+            Log.e(TAG, "error:" + e.getCause());
+            e.printStackTrace();
+        }
+    }
+
 
     @Override
     public void onClick(View v) {
@@ -89,22 +130,74 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
 
             case R.id.take_record:
+                if (isRecord) {
+                    closeRecord();
+                    takeRecord.setText("开始");
+                    startPreview();
+                } else {
+                    startRecord();
+                }
 
+                break;
+
+            case R.id.take_record_screen:
                 break;
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mTextureView.setSurfaceTextureListener(mSurfaceTextureListener);
+    void closeRecord() {
+        mMediaRecorder.stop();
+        isRecord = false;
+    }
+
+    void startRecord() {
+        setupMediaRecorder();
+        try {
+            mCaptureRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            mCaptureRequestBuilder.addTarget(mSurface);
+            mCaptureRequestBuilder.addTarget(mMediaRecorder.getSurface());
+
+            mCameraDevice.createCaptureSession(Arrays.asList(mSurface, mMediaRecorder.getSurface()), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    mCameraCaptureSession = session;
+                    mCaptureRequest = mCaptureRequestBuilder.build();
+                    try {
+                        mCameraCaptureSession.setRepeatingRequest(mCaptureRequest, mCaptureCallback, null);
+                        mMediaRecorder.start();
+                        isRecord = true;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                takeRecord.setText("暂停");
+                            }
+                        });
+                    } catch (CameraAccessException e) {
+                        Log.e(TAG, "error message" + e.getReason());
+                    }
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    Toast.makeText(getApplicationContext(), "开启摄像头失败", Toast.LENGTH_SHORT).show();
+                    closeCamera();
+                    Log.e(TAG, "开启摄像头失败");
+                }
+            }, null);
+        } catch (CameraAccessException e) {
+            CameraUtil.closeCameraDevice(mCameraDevice);
+            Log.e(TAG, "error message" + e.getReason());
+        }
     }
 
     private void openCamera() {
         try {
             if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED &&
-                    checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 0);
+                    checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED &&
+                    checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        Manifest.permission.RECORD_AUDIO}, 0);
                 return;
             }
             mCameraManager.openCamera(mCameraId, mCameraStateCallback, null);
@@ -147,18 +240,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void takePic() {
         try {
-            final CaptureRequest.Builder mBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            mBuilder.addTarget(mImageReader.getSurface());
-            mBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
-            mBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED);
-            mBuilder.set(CaptureRequest.JPEG_ORIENTATION, getRequestedOrientation());
+            mCaptureRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            mCaptureRequestBuilder.addTarget(mImageReader.getSurface());
+            mCaptureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+            mCaptureRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED);
+            mCaptureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, getRequestedOrientation());
             mCameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     try {
+                        session.capture(mCaptureRequestBuilder.build(), null, null);
                         session.stopRepeating();
                         session.abortCaptures();
-                        session.capture(mBuilder.build(), null, null);
                         startPreview();
                     } catch (CameraAccessException e) {
                         Log.e(TAG, "error message" + e.getReason());
@@ -235,12 +328,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         }
     };
-
+    SurfaceTexture mSurfaceTexture;
+    Surface mSurface;
     private CameraDevice.StateCallback mCameraStateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
             Log.i(TAG, "open");
             mCameraDevice = camera;
+            mSurfaceTexture = mTextureView.getSurfaceTexture();
+            mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+            mSurface = new Surface(mSurfaceTexture);
             startPreview();
         }
 
@@ -257,9 +354,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     };
 
     private void startPreview() {
-        SurfaceTexture mSurfaceTexture = mTextureView.getSurfaceTexture();
-        mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
-        Surface mSurface = new Surface(mSurfaceTexture);
         try {
             mCaptureRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             mCaptureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, getRequestedOrientation());
